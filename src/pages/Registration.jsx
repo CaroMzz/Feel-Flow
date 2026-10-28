@@ -44,7 +44,7 @@ const benefitContent = [
   },
 ]
 
-function Registration({ onBackToLogin }) {
+function Registration({ onBackToLogin, onGoHome }) {
   const [step, setStep] = useState(0)
   const [complete, setComplete] = useState(false)
   const [error, setError] = useState('')
@@ -150,11 +150,11 @@ function Registration({ onBackToLogin }) {
               <span className="success-icon" aria-hidden="true">✓</span>
               <h2>¡Tu perfil está listo!</h2>
               <p>
-                Tus preferencias quedaron guardadas en esta sesión. Cuando conectemos
-                el backend, vamos a poder crear tu cuenta y conservar tus datos.
+                El perfil está listo en esta vista de demostración. Las cuentas y el
+                guardado permanente todavía no están conectados.
               </p>
-              <button className="registration-primary" type="button" onClick={onBackToLogin}>
-                VOLVER AL INICIO DE SESIÓN <span aria-hidden="true">→</span>
+              <button className="registration-primary" type="button" onClick={onGoHome}>
+                IR AL INICIO <span aria-hidden="true">→</span>
               </button>
             </div>
           ) : (

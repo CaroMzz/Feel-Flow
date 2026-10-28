@@ -19,7 +19,7 @@ const benefits = [
   },
 ]
 
-function Login({ onCreateAccount }) {
+function Login({ onCreateAccount, onLogin }) {
   const [mode, setMode] = useState('login')
   const [showPassword, setShowPassword] = useState(false)
   const [notice, setNotice] = useState('')
@@ -33,11 +33,12 @@ function Login({ onCreateAccount }) {
 
   function handleSubmit(event) {
     event.preventDefault()
-    setNotice(
-      isRecovery
-        ? 'La recuperación de contraseña estará disponible cuando conectemos tu cuenta.'
-        : 'El acceso a tu cuenta estará disponible cuando conectemos el servicio de inicio de sesión.',
-    )
+    if (isRecovery) {
+      setNotice('La recuperación de contraseña estará disponible cuando conectemos tu cuenta.')
+      return
+    }
+
+    onLogin()
   }
 
   return (
