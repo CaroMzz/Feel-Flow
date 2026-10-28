@@ -19,12 +19,11 @@ const benefits = [
   },
 ]
 
-function Login() {
+function Login({ onCreateAccount }) {
   const [mode, setMode] = useState('login')
   const [showPassword, setShowPassword] = useState(false)
   const [notice, setNotice] = useState('')
 
-  const isLogin = mode === 'login'
   const isRecovery = mode === 'recovery'
 
   function changeMode(nextMode) {
@@ -65,35 +64,15 @@ function Login() {
           <h1>
             {isRecovery
               ? 'Recuperá tu contraseña'
-              : isLogin
-                ? 'Qué lindo verte'
-                : 'Empezá tu camino'}
+              : 'Qué lindo verte'}
           </h1>
           <p className="form-intro">
             {isRecovery
               ? 'Ingresá tu correo y te ayudaremos a volver a tu cuenta.'
-              : isLogin
-                ? 'Iniciá sesión y encontrá todo tu progreso en un solo lugar.'
-                : 'Creá tu cuenta y diseñá una rutina que sea tuya.'}
+              : 'Iniciá sesión y encontrá todo tu progreso en un solo lugar.'}
           </p>
 
           <form className="auth-form" onSubmit={handleSubmit}>
-            {!isLogin && !isRecovery && (
-              <label className="field">
-                <span>Tu nombre</span>
-                <span className="input-wrap">
-                  <span className="input-icon" aria-hidden="true">♙</span>
-                  <input
-                    type="text"
-                    name="name"
-                    placeholder="¿Cómo te llamás?"
-                    autoComplete="name"
-                    required
-                  />
-                </span>
-              </label>
-            )}
-
             <label className="field">
               <span>Correo electrónico</span>
               <span className="input-wrap">
@@ -118,7 +97,7 @@ function Login() {
                     id="password"
                     name="password"
                     placeholder="Mínimo 8 caracteres"
-                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    autoComplete="current-password"
                     minLength={8}
                     required
                   />
@@ -134,7 +113,7 @@ function Login() {
               </div>
             )}
 
-            {isLogin && (
+            {!isRecovery && (
               <div className="form-options">
                 <label className="remember-option">
                   <input type="checkbox" name="remember" />
@@ -153,7 +132,7 @@ function Login() {
             {notice && <p className="form-notice" role="status">{notice}</p>}
 
             <button className="submit-button" type="submit">
-              {isRecovery ? 'RECUPERAR CONTRASEÑA' : isLogin ? 'INICIAR SESIÓN' : 'CREAR MI CUENTA'}
+              {isRecovery ? 'RECUPERAR CONTRASEÑA' : 'INICIAR SESIÓN'}
               <span aria-hidden="true">→</span>
             </button>
           </form>
@@ -166,18 +145,11 @@ function Login() {
                   Volvé a iniciar sesión
                 </button>
               </>
-            ) : isLogin ? (
-              <>
-                ¿Todavía no tenés cuenta?{' '}
-                <button type="button" className="text-button switch-link" onClick={() => changeMode('signup')}>
-                  Crear una cuenta
-                </button>
-              </>
             ) : (
               <>
-                ¿Ya tenés cuenta?{' '}
-                <button type="button" className="text-button switch-link" onClick={() => changeMode('login')}>
-                  Iniciá sesión
+                ¿Todavía no tenés cuenta?{' '}
+                <button type="button" className="text-button switch-link" onClick={onCreateAccount}>
+                  Crear una cuenta
                 </button>
               </>
             )}
