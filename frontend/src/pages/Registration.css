@@ -29,6 +29,14 @@
   text-decoration: none;
 }
 
+.registration-brand-name img {
+  display: block;
+  width: 184px;
+  height: 82px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
 .registration-brand-name i {
   color: #c77f60;
   font-style: normal;
@@ -681,6 +689,11 @@
 
   .registration-brand {
     margin-bottom: 14px;
+  }
+
+  .registration-brand-name img {
+    width: 148px;
+    height: 64px;
   }
 
   .registration-title {

@@ -1,16 +1,39 @@
-# React + Vite
+# Feel & Flow
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación para crear rutinas de gimnasio y acompañar el progreso personal. El proyecto separa el frontend React/Vite de una API Express con persistencia SQLite.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 22 o superior
+- npm
 
-## React Compiler
+## Desarrollo local
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Desde la raíz del repositorio:
 
-## Expanding the ESLint configuration
+```sh
+npm install
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+El frontend estará disponible en `http://127.0.0.1:5173` y la API en `http://127.0.0.1:3001`. Vite redirige las solicitudes `/api` al backend.
+
+Para configurar el backend, copiá `backend/.env.example` a `backend/.env`. La base SQLite se crea por defecto en `backend/data/feel-flow.sqlite`; se puede cambiar con `DATABASE_PATH`.
+
+## Comandos
+
+```sh
+npm run build  # Compila el frontend en frontend/dist
+npm run lint   # Ejecuta ESLint en el frontend
+npm test       # Ejecuta las pruebas de integración del backend
+npm start      # Inicia el backend
+```
+
+Después de compilar el frontend, `npm start` también sirve `frontend/dist` desde el backend.
+
+## Estructura
+
+- `frontend/`: pantallas, estilos, recursos estáticos y cliente de API.
+- `backend/`: API, autenticación, SQLite y pruebas.
+
+Las cuentas, sesiones, perfiles, rutinas y asistencias se guardan en SQLite. Cada cuenta empieza sin rutinas y puede crear su primera desde la pantalla de inicio.

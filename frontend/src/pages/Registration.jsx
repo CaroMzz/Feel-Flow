@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { apiRequest } from '../lib/api.js'
 import './Registration.css'
 
 const steps = ['Datos básicos', 'Perfil de fitness', 'Preferencias']
@@ -48,6 +49,8 @@ function Registration({ onBackToLogin, onGoHome }) {
   const [step, setStep] = useState(0)
   const [complete, setComplete] = useState(false)
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [registeredUser, setRegisteredUser] = useState(null)
   const [account, setAccount] = useState({ name: '', email: '' })
   const [passwords, setPasswords] = useState({ password: '', confirmPassword: '' })
   const [fitness, setFitness] = useState({
@@ -80,7 +83,7 @@ function Registration({ onBackToLogin, onGoHome }) {
     }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setError('')
 
@@ -98,7 +101,25 @@ function Registration({ onBackToLogin, onGoHome }) {
       return
     }
 
-    setComplete(true)
+    setIsSubmitting(true)
+    try {
+      const { user } = await apiRequest('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: account.name,
+          email: account.email,
+          password: passwords.password,
+          fitness,
+          preferences,
+        }),
+      })
+      setRegisteredUser(user)
+      setComplete(true)
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const currentBenefits = benefitContent[step]
@@ -115,8 +136,7 @@ function Registration({ onBackToLogin, onGoHome }) {
             onBackToLogin()
           }}
         >
-          <span className="registration-brand-mark" aria-hidden="true">f<span>&</span>f</span>
-          <span>FEEL <i>&amp;</i> FLOW</span>
+          <img src="/feel-flow-logo-transparent.png" alt="Feel & Flow — Your fitness journey" />
         </a>
         <p>FITNESS</p>
         <span>Tu bienestar, a tu ritmo.</span>
@@ -150,10 +170,10 @@ function Registration({ onBackToLogin, onGoHome }) {
               <span className="success-icon" aria-hidden="true">✓</span>
               <h2>¡Tu perfil está listo!</h2>
               <p>
-                El perfil está listo en esta vista de demostración. Las cuentas y el
-                guardado permanente todavía no están conectados.
+                Tu cuenta ya está creada. Ahora podés crear tu primera rutina y empezar
+                a entrenar a tu manera.
               </p>
-              <button className="registration-primary" type="button" onClick={onGoHome}>
+              <button className="registration-primary" type="button" onClick={() => onGoHome(registeredUser)}>
                 IR AL INICIO <span aria-hidden="true">→</span>
               </button>
             </div>
@@ -397,9 +417,9 @@ function Registration({ onBackToLogin, onGoHome }) {
                     ← ATRÁS
                   </button>
                 )}
-                <button className="registration-primary" type="submit">
-                  {step === 2 ? 'FINALIZAR' : step === 1 ? 'CONTINUAR' : 'REGISTRARME'}
-                  <span aria-hidden="true">→</span>
+                <button className="registration-primary" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'CREANDO CUENTA...' : step === 2 ? 'FINALIZAR' : step === 1 ? 'CONTINUAR' : 'REGISTRARME'}
+                  {!isSubmitting && <span aria-hidden="true">→</span>}
                 </button>
               </div>
             </form>
