@@ -14,6 +14,7 @@ dist-ssr
 backend/data/*.sqlite
 backend/data/*.sqlite-shm
 backend/data/*.sqlite-wal
+backend/data/exercise-media/
 backend/.env
 
 # Editor directories and files

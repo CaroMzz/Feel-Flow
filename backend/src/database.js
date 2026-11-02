@@ -45,6 +45,15 @@ export function createDatabase(databasePath = defaultDatabasePath) {
 
     CREATE INDEX IF NOT EXISTS workouts_user_id_idx ON workouts(user_id);
 
+    CREATE TABLE IF NOT EXISTS workout_exercises (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL CHECK (position >= 0),
+      name TEXT NOT NULL,
+      is_completed INTEGER NOT NULL DEFAULT 0 CHECK (is_completed IN (0, 1)),
+      UNIQUE (workout_id, position)
+    );
+
     CREATE TABLE IF NOT EXISTS attendance (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -54,5 +63,45 @@ export function createDatabase(databasePath = defaultDatabasePath) {
     );
   `)
 
+  migrateWorkoutExercises(database)
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS workout_exercises_workout_id_idx
+      ON workout_exercises(workout_id, position);
+
+    CREATE TABLE IF NOT EXISTS exercise_media (
+      exercise_id INTEGER PRIMARY KEY REFERENCES workout_exercises(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL CHECK (mime_type IN (
+        'image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'
+      )),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+
   return database
+}
+
+function migrateWorkoutExercises(database) {
+  const columns = database.pragma('table_info(workout_exercises)')
+  if (!columns.some(({ name }) => name === 'sets')) return
+
+  database.transaction(() => {
+    database.exec(`
+      CREATE TABLE workout_exercises_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        name TEXT NOT NULL,
+        is_completed INTEGER NOT NULL DEFAULT 0 CHECK (is_completed IN (0, 1)),
+        UNIQUE (workout_id, position)
+      );
+
+      INSERT INTO workout_exercises_new (id, workout_id, position, name, is_completed)
+      SELECT id, workout_id, position, name, is_completed FROM workout_exercises;
+
+      DROP TABLE workout_exercises;
+      ALTER TABLE workout_exercises_new RENAME TO workout_exercises;
+    `)
+  })()
 }

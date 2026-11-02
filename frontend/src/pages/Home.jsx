@@ -8,6 +8,18 @@ const monthNames = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ]
+const allowedMediaTypes = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm',
+])
+const maxMediaSize = 20 * 1024 * 1024
+
+function ExerciseMediaPreview({ media, exerciseName }) {
+  if (!media?.url || !media.contentType) return null
+
+  return media.contentType.startsWith('video/')
+    ? <video className="exercise-media-preview" src={media.url} controls preload="metadata" aria-label={`Video de ${exerciseName}`} />
+    : <img className="exercise-media-preview" src={media.url} alt={`Referencia de ${exerciseName}`} />
+}
 
 function getCalendarDays(date) {
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
@@ -33,11 +45,16 @@ function Home({ user, onSignOut }) {
     () => window.location.hash.slice(1) || 'inicio',
   )
   const [isRoutineDialogOpen, setIsRoutineDialogOpen] = useState(false)
+  const [editingWorkout, setEditingWorkout] = useState(null)
   const [routineName, setRoutineName] = useState('')
   const [routineDay, setRoutineDay] = useState('Lunes')
+  const [routineExercises, setRoutineExercises] = useState([
+    { id: 'exercise-1', exerciseId: null, name: '', media: null, mediaFile: null, removeMedia: false },
+  ])
   const [routineFormError, setRoutineFormError] = useState('')
   const [isSavingRoutine, setIsSavingRoutine] = useState(false)
   const routineDialogRef = useRef(null)
+  const nextExerciseId = useRef(2)
 
   const calendarDays = useMemo(() => getCalendarDays(calendarDate), [calendarDate])
   const monthIsCurrent = calendarDate.getFullYear() === new Date().getFullYear()
@@ -102,18 +119,76 @@ function Home({ user, onSignOut }) {
     setError('')
   }
 
-  function openRoutineDialog() {
-    setRoutineName('')
-    setRoutineDay('Lunes')
+  function openRoutineDialog(workout = null) {
+    setEditingWorkout(workout)
+    setRoutineName(workout?.name ?? '')
+    setRoutineDay(workout?.day ?? 'Lunes')
+    setRoutineExercises(workout?.exercises.length
+      ? workout.exercises.map((exercise, index) => ({
+        id: `exercise-${index + 1}`,
+        exerciseId: exercise.id,
+        name: exercise.name,
+        media: exercise.media,
+        mediaFile: null,
+        removeMedia: false,
+      }))
+      : [{ id: 'exercise-1', exerciseId: null, name: '', media: null, mediaFile: null, removeMedia: false }])
+    nextExerciseId.current = workout?.exercises.length + 1 || 2
     setRoutineFormError('')
     setIsRoutineDialogOpen(true)
   }
 
-  async function createWorkout(event) {
+  function updateRoutineExercise(exerciseId, field, value) {
+    setRoutineExercises((current) => current.map((exercise) => (
+      exercise.id === exerciseId ? { ...exercise, [field]: value } : exercise
+    )))
+  }
+
+  function addRoutineExercise() {
+    if (routineExercises.length >= 30) {
+      setRoutineFormError('Una rutina puede tener hasta 30 ejercicios.')
+      return
+    }
+
+    setRoutineExercises((current) => [
+      ...current,
+      {
+        id: `exercise-${nextExerciseId.current++}`,
+        exerciseId: null,
+        name: '',
+        media: null,
+        mediaFile: null,
+        removeMedia: false,
+      },
+    ])
+    setRoutineFormError('')
+  }
+
+  function removeRoutineExercise(exerciseId) {
+    setRoutineExercises((current) => current.filter((exercise) => exercise.id !== exerciseId))
+    setRoutineFormError('')
+  }
+
+  async function saveWorkout(event) {
     event.preventDefault()
     const name = routineName.trim()
     if (name.length < 2 || name.length > 60) {
       setRoutineFormError('El nombre debe tener entre 2 y 60 caracteres.')
+      return
+    }
+    if (routineExercises.length < 1) {
+      setRoutineFormError('Agregá al menos un ejercicio.')
+      return
+    }
+    const exercises = routineExercises.map((exercise) => ({
+      ...(exercise.exerciseId ? { id: exercise.exerciseId } : {}),
+      name: exercise.name.trim(),
+    }))
+    const invalidExerciseIndex = exercises.findIndex((exercise) => (
+      exercise.name.length < 2 || exercise.name.length > 80
+    ))
+    if (invalidExerciseIndex >= 0) {
+      setRoutineFormError(`Revisá los datos del ejercicio ${invalidExerciseIndex + 1}.`)
       return
     }
 
@@ -121,42 +196,73 @@ function Home({ user, onSignOut }) {
     setRoutineFormError('')
     setError('')
     try {
-      const { workout } = await apiRequest('/api/workouts', {
-        method: 'POST',
-        body: JSON.stringify({ name, day: routineDay }),
-      })
-      setDashboard((current) => current && ({
-        ...current,
-        workouts: [...current.workouts, workout],
-      }))
-      setNotice(`¡Creaste la rutina ${workout.name}!`)
+      const { workout } = await apiRequest(
+        editingWorkout ? `/api/workouts/${editingWorkout.id}` : '/api/workouts',
+        {
+          method: editingWorkout ? 'PUT' : 'POST',
+          body: JSON.stringify({ name, day: routineDay, exercises }),
+        },
+      )
+      const mediaFailures = []
+      for (const [index, exercise] of routineExercises.entries()) {
+        const savedExercise = workout.exercises[index]
+        if (exercise.removeMedia && exercise.media && !exercise.mediaFile) {
+          try {
+            await apiRequest(
+              `/api/workouts/${workout.id}/exercises/${savedExercise.id}/media`,
+              { method: 'DELETE' },
+            )
+          } catch (requestError) {
+            mediaFailures.push({ index, message: requestError.message })
+          }
+        }
+        if (exercise.mediaFile) {
+          try {
+            await apiRequest(
+              `/api/workouts/${workout.id}/exercises/${savedExercise.id}/media`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': exercise.mediaFile.type },
+                body: exercise.mediaFile,
+              },
+            )
+          } catch (requestError) {
+            mediaFailures.push({ index, message: requestError.message })
+          }
+        }
+      }
+
+      const updatedDashboard = await fetchDashboard()
+      setDashboard(updatedDashboard)
+      const savedWorkout = updatedDashboard.workouts.find((item) => item.id === workout.id)
+      if (editingWorkout && activeWorkout === editingWorkout.id) {
+        setActiveWorkout(null)
+      }
+      if (mediaFailures.length > 0) {
+        const failedIndexes = new Set(mediaFailures.map(({ index }) => index))
+        setEditingWorkout(savedWorkout)
+        setRoutineExercises((current) => current.map((exercise, index) => ({
+          ...exercise,
+          exerciseId: savedWorkout.exercises[index].id,
+          media: savedWorkout.exercises[index].media,
+          mediaFile: failedIndexes.has(index) ? exercise.mediaFile : null,
+          removeMedia: failedIndexes.has(index) && exercise.removeMedia,
+        })))
+        setRoutineFormError(
+          `La rutina se guardó, pero no se pudieron guardar los archivos de los ejercicios ${
+            [...new Set(mediaFailures.map(({ index }) => index + 1))].join(', ')
+          }. ${mediaFailures[0].message} Podés volver a intentarlo.`,
+        )
+        return
+      }
+      setNotice(editingWorkout
+        ? `Actualizaste ${workout.name}. Su progreso volvió a cero.`
+        : `¡Creaste la rutina ${workout.name}!`)
       setIsRoutineDialogOpen(false)
     } catch (requestError) {
       setRoutineFormError(requestError.message)
     } finally {
       setIsSavingRoutine(false)
-    }
-  }
-
-  async function addExercise() {
-    const workout = workouts[0]
-    if (!workout) return
-
-    setError('')
-    try {
-      const { workout: updatedWorkout } = await apiRequest(
-        `/api/workouts/${workout.id}/exercises`,
-        { method: 'POST', body: JSON.stringify({}) },
-      )
-      setDashboard((current) => ({
-        ...current,
-        workouts: current.workouts.map((item) => (
-          item.id === updatedWorkout.id ? updatedWorkout : item
-        )),
-      }))
-      setNotice(`Se agregó un ejercicio a ${workout.name}.`)
-    } catch (requestError) {
-      setError(requestError.message)
     }
   }
 
@@ -173,6 +279,26 @@ function Home({ user, onSignOut }) {
       setActiveWorkout(null)
       setNotice(`¡Completaste la rutina ${workoutName}!`)
       setDashboard(await fetchDashboard())
+    } catch (requestError) {
+      setError(requestError.message)
+    }
+  }
+
+  async function deleteWorkout(workout) {
+    const confirmed = window.confirm(
+      `¿Eliminar la rutina "${workout.name}"? Esta acción también quitará sus ejercicios y archivos adjuntos.`,
+    )
+    if (!confirmed) return
+
+    setError('')
+    try {
+      await apiRequest(`/api/workouts/${workout.id}`, { method: 'DELETE' })
+      setDashboard((current) => current && ({
+        ...current,
+        workouts: current.workouts.filter((item) => item.id !== workout.id),
+      }))
+      if (activeWorkout === workout.id) setActiveWorkout(null)
+      setNotice(`Eliminaste la rutina ${workout.name}.`)
     } catch (requestError) {
       setError(requestError.message)
     }
@@ -297,7 +423,7 @@ function Home({ user, onSignOut }) {
                   <span className="section-kicker">ENCUENTRA TU RITMO</span>
                   <h2 id="week-heading">Tus rutinas</h2>
                 </div>
-                <button className="create-routine-button" type="button" onClick={openRoutineDialog}>
+                <button className="create-routine-button" type="button" onClick={() => openRoutineDialog()}>
                   <span aria-hidden="true">＋</span> Crear rutina
                 </button>
               </div>
@@ -308,7 +434,7 @@ function Home({ user, onSignOut }) {
                   <span className="empty-routines-icon" aria-hidden="true">✦</span>
                   <h3>Todavía no tenés rutinas</h3>
                   <p>Creá tu primera rutina y empezá a entrenar a tu manera.</p>
-                  <button className="empty-routines-button" type="button" onClick={openRoutineDialog}>
+                  <button className="empty-routines-button" type="button" onClick={() => openRoutineDialog()}>
                     Crear mi primera rutina <span aria-hidden="true">→</span>
                   </button>
                 </div>
@@ -322,7 +448,7 @@ function Home({ user, onSignOut }) {
                   <div className="workout-list">
                     {workouts.map((workout) => {
                       const isActive = activeWorkout === workout.id
-                      const progress = Math.min((workout.completed / workout.exercises) * 100, 100)
+                      const progress = Math.min((workout.completed / workout.totalExercises) * 100, 100)
                       return (
                         <article
                           className={`workout-card${isActive ? ' is-active' : ''}`}
@@ -338,7 +464,7 @@ function Home({ user, onSignOut }) {
                               {isActive && <span className="workout-live">EN CURSO</span>}
                             </div>
                             <div className="workout-progress-label">
-                              <span>{workout.completed}/{workout.exercises} ejercicios completos</span>
+                              <span>{workout.completed}/{workout.totalExercises} ejercicios completos</span>
                               <span>{Math.round(progress)}%</span>
                             </div>
                             <div
@@ -352,25 +478,57 @@ function Home({ user, onSignOut }) {
                               <span style={{ width: `${progress}%` }} />
                             </div>
                           </div>
-                          <button
-                            className="start-workout"
-                            type="button"
-                            aria-pressed={isActive}
-                            onClick={() => toggleWorkout(workout.id, workout.name)}
-                          >
-                            {isActive ? 'Finalizar' : 'Iniciar rutina'}
-                          </button>
+                          <div className="workout-actions">
+                            <button
+                              className="edit-workout"
+                              type="button"
+                              onClick={() => openRoutineDialog(workout)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="delete-workout"
+                              type="button"
+                              aria-label={`Eliminar ${workout.name}`}
+                              onClick={() => deleteWorkout(workout)}
+                            >
+                              Eliminar
+                            </button>
+                            <button
+                              className="start-workout"
+                              type="button"
+                              aria-pressed={isActive}
+                              onClick={() => toggleWorkout(workout.id, workout.name)}
+                            >
+                              {isActive ? 'Finalizar' : 'Iniciar'}
+                            </button>
+                          </div>
+                          {workout.exercises.length > 0 ? (
+                            <ul className="workout-exercises">
+                              {workout.exercises.map((exercise, index) => (
+                                <li key={exercise.id}>
+                                  <span className="exercise-number" aria-label={`Ejercicio ${index + 1}`}>
+                                    {String(index + 1).padStart(2, '0')}
+                                  </span>
+                                  <div className="exercise-details">
+                                    <span className="exercise-name">{exercise.name}</span>
+                                    {exercise.media && (
+                                      <ExerciseMediaPreview media={exercise.media} exerciseName={exercise.name} />
+                                    )}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="workout-no-exercises">
+                              Esta rutina todavía no tiene ejercicios detallados. Podés agregarlos al editarla.
+                            </p>
+                          )}
                         </article>
                       )
                     })}
                   </div>
-
-                  <div className="week-panel-footer">
-                    <button type="button" className="add-exercise" onClick={addExercise}>
-                      <span aria-hidden="true">＋</span> Añadir ejercicio
-                    </button>
-                    {notice && <p className="home-notice" role="status">{notice}</p>}
-                  </div>
+                  {notice && <p className="home-notice" role="status">{notice}</p>}
                 </>
               )}
               {notice && workouts.length === 0 && <p className="home-notice" role="status">{notice}</p>}
@@ -471,7 +629,7 @@ function Home({ user, onSignOut }) {
           aria-labelledby="routine-dialog-title"
           onClose={() => setIsRoutineDialogOpen(false)}
         >
-          <form className="routine-form" onSubmit={createWorkout}>
+          <form className="routine-form" onSubmit={saveWorkout}>
             <button
               className="routine-dialog-close"
               type="button"
@@ -481,10 +639,12 @@ function Home({ user, onSignOut }) {
               ×
             </button>
             <span className="section-kicker">EMPEZÁ A TU MANERA</span>
-            <h2 id="routine-dialog-title">Crear una rutina</h2>
-            <p>Elegí un nombre y el día en que querés entrenar.</p>
+            <h2 id="routine-dialog-title">
+              {editingWorkout ? 'Editar rutina' : 'Crear una rutina'}
+            </h2>
+            <p>Definí el día y agregá los ejercicios. Podés adjuntar una foto o un video como referencia.</p>
 
-            <label htmlFor="routine-name">Nombre de la rutina</label>
+            <label htmlFor="routine-name">Título de la rutina</label>
             <input
               id="routine-name"
               name="name"
@@ -508,9 +668,113 @@ function Home({ user, onSignOut }) {
               {workoutDays.map((day) => <option key={day}>{day}</option>)}
             </select>
 
+            <div className="routine-exercise-heading">
+              <span>Ejercicios</span>
+              <span>{routineExercises.length}/30</span>
+            </div>
+            <div className="routine-exercise-list">
+              {routineExercises.map((exercise, index) => (
+                <fieldset className="routine-exercise-fields" key={exercise.id}>
+                  <legend>
+                    <span>Ejercicio {index + 1}</span>
+                    {routineExercises.length > 1 && (
+                      <button
+                        type="button"
+                        className="remove-exercise"
+                        onClick={() => removeRoutineExercise(exercise.id)}
+                        aria-label={`Quitar ejercicio ${index + 1}`}
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </legend>
+                  <label htmlFor={`${exercise.id}-name`}>Nombre</label>
+                  <input
+                    id={`${exercise.id}-name`}
+                    type="text"
+                    value={exercise.name}
+                    onChange={(event) => updateRoutineExercise(exercise.id, 'name', event.target.value)}
+                    placeholder="Ej. Sentadillas"
+                    minLength={2}
+                    maxLength={80}
+                    required
+                  />
+                  <label htmlFor={`${exercise.id}-media`}>Foto o video (opcional, hasta 20 MB)</label>
+                  <input
+                    key={`${exercise.id}-${exercise.mediaFile?.name ?? 'empty'}-${exercise.removeMedia}`}
+                    id={`${exercise.id}-media`}
+                    className="exercise-media-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (!file) return
+                      if (!allowedMediaTypes.has(file.type)) {
+                        setRoutineFormError('Elegí una imagen JPG, PNG o WebP, o un video MP4 o WebM.')
+                        event.target.value = ''
+                        return
+                      }
+                      if (file.size > maxMediaSize) {
+                        setRoutineFormError('El archivo no puede superar los 20 MB.')
+                        event.target.value = ''
+                        return
+                      }
+                      updateRoutineExercise(exercise.id, 'mediaFile', file)
+                      updateRoutineExercise(exercise.id, 'removeMedia', false)
+                      setRoutineFormError('')
+                    }}
+                  />
+                  {exercise.removeMedia ? (
+                    <p className="exercise-media-status">El archivo se quitará al guardar.</p>
+                  ) : (
+                    <>
+                      {(exercise.media || exercise.mediaFile) && (
+                        <div className="exercise-media-selection">
+                          <ExerciseMediaPreview
+                            media={exercise.mediaFile ? null : exercise.media}
+                            exerciseName={exercise.name}
+                          />
+                          <span>{exercise.mediaFile?.name ?? 'Archivo adjunto'}</span>
+                        </div>
+                      )}
+                      {(exercise.media || exercise.mediaFile) && (
+                        <button
+                          className="remove-exercise-media"
+                          type="button"
+                          onClick={() => {
+                            updateRoutineExercise(exercise.id, 'mediaFile', null)
+                            updateRoutineExercise(exercise.id, 'removeMedia', Boolean(exercise.media))
+                          }}
+                        >
+                          Quitar archivo
+                        </button>
+                      )}
+                    </>
+                  )}
+                </fieldset>
+              ))}
+            </div>
+            <button
+              className="add-routine-exercise"
+              type="button"
+              onClick={addRoutineExercise}
+              disabled={routineExercises.length >= 30}
+            >
+              <span aria-hidden="true">＋</span> Agregar ejercicio
+            </button>
+
             {routineFormError && <p className="routine-form-error" role="alert">{routineFormError}</p>}
+            {editingWorkout && (
+              <p className="routine-edit-note">
+                Al guardar cambios, el progreso de esta rutina se reiniciará.
+              </p>
+            )}
             <button className="routine-submit" type="submit" disabled={isSavingRoutine}>
-              {isSavingRoutine ? 'Guardando...' : 'Guardar rutina'}
+              {isSavingRoutine
+                ? 'Guardando...'
+                : editingWorkout
+                  ? 'Guardar cambios'
+                  : 'Guardar rutina'}
             </button>
           </form>
         </dialog>

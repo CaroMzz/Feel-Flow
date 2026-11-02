@@ -36,4 +36,6 @@ Después de compilar el frontend, `npm start` también sirve `frontend/dist` des
 - `frontend/`: pantallas, estilos, recursos estáticos y cliente de API.
 - `backend/`: API, autenticación, SQLite y pruebas.
 
-Las cuentas, sesiones, perfiles, rutinas y asistencias se guardan en SQLite. Cada cuenta empieza sin rutinas y puede crear su primera desde la pantalla de inicio.
+Las cuentas, sesiones, perfiles, rutinas, ejercicios y asistencias se guardan en SQLite. Cada cuenta empieza sin rutinas y puede crear o editar las suyas desde la pantalla de inicio. Una rutina incluye un título, un día y entre 1 y 30 ejercicios. Las series, las repeticiones y el peso no forman parte de la plantilla; se podrán registrar por sesión en una etapa posterior.
+
+Cada ejercicio admite una imagen JPG, PNG o WebP, o un video MP4 o WebM, de hasta 20 MB. Los archivos se guardan localmente en `backend/data/exercise-media` y solo están disponibles para la cuenta propietaria.
